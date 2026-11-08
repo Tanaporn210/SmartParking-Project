@@ -1,0 +1,369 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>SmartParking Project</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+<style>
+/* Layout: a top-down map of one lot. Two rows of bays face a drive lane. Tap a bay to park or to see who is in it. */
+:root{
+  --bg:#E8EAE7; --surface:#F6F7F5; --ink:#1E2528; --muted:#5C686C; --line:#C5CBC7;
+  --free:#1D7255; --free-bg:#DCEEE5;
+  --taken:#B93C0B; --taken-bg:#F6DFD2;
+  --mine:#1D4ED8; --mine-bg:#DAE3FA;
+  --paint:#D9A915; --asphalt:#D3D7D3;
+  --font-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --font-body:"IBM Plex Sans Thai","Noto Sans Thai",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#13191B; --surface:#1B2326; --ink:#E5EAE8; --muted:#92A0A3; --line:#33413F;
+    --free:#52C79E; --free-bg:#15322A;
+    --taken:#FB9A55; --taken-bg:#3B2417;
+    --mine:#86A8FF; --mine-bg:#1B2A57;
+    --paint:#E2B722; --asphalt:#222B2E; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#13191B; --surface:#1B2326; --ink:#E5EAE8; --muted:#92A0A3; --line:#33413F;
+  --free:#52C79E; --free-bg:#15322A;
+  --taken:#FB9A55; --taken-bg:#3B2417;
+  --mine:#86A8FF; --mine-bg:#1B2A57;
+  --paint:#E2B722; --asphalt:#222B2E; color-scheme:dark;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;
+  padding-block:20px 220px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--font-display);font-weight:700;font-size:2.2rem;line-height:1;letter-spacing:.02em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:4px 0 0}
+.counts{display:flex;gap:18px;align-items:flex-end}
+.count{display:flex;flex-direction:column;align-items:flex-end}
+.count b{font-family:var(--font-display);font-size:2.4rem;line-height:1;font-weight:700;font-variant-numeric:tabular-nums}
+.count span{font-size:.8rem;color:var(--muted);letter-spacing:.04em}
+.count.free b{color:var(--free)} .count.taken b{color:var(--taken)}
+.status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.status.live .dot{background:var(--free);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.banner{background:var(--taken-bg);color:var(--ink);border:1px solid var(--taken);border-radius:8px;padding:10px 14px}
+.lot{background:var(--asphalt);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.zone-label{font-family:var(--font-display);font-weight:600;letter-spacing:.12em;color:var(--muted);font-size:.95rem}
+.row{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}
+.lane{height:54px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;letter-spacing:.08em;
+  background:linear-gradient(90deg,var(--paint) 0 18px,transparent 18px 36px) center/36px 3px repeat-x no-repeat}
+.lane span{background:var(--asphalt);padding:0 12px}
+.bay{position:relative;aspect-ratio:3/4;min-width:0;padding:0;border:0;border-inline:3px solid var(--paint);border-radius:2px;
+  background:var(--free-bg);color:var(--free);cursor:pointer;overflow:hidden;font:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.bay .no{font-family:var(--font-display);font-weight:700;font-size:1.7rem;line-height:1;letter-spacing:.03em}
+.bay .st{font-size:.72rem;font-weight:500}
+.bay.taken{background:var(--taken-bg);color:var(--taken)}
+.bay.mine{background:var(--mine-bg);color:var(--mine)}
+.bay img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.bay .tag{position:absolute;left:0;right:0;bottom:0;padding:14px 4px 4px;background:linear-gradient(transparent,rgba(0,0,0,.72));color:#fff;display:flex;flex-direction:column;align-items:center}
+.bay .tag .no{font-size:1.25rem}
+.bay .tag .st{color:#fff;opacity:.92}
+.bay.sel{outline:3px solid var(--ink);outline-offset:-3px}
+.bay:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid var(--mine);outline-offset:2px}
+.bay.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{box-shadow:inset 0 0 0 40px var(--taken)}100%{box-shadow:inset 0 0 0 40px transparent}}
+.legend{display:flex;flex-wrap:wrap;gap:16px;color:var(--muted);font-size:.85rem}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.sheet-in{width:100%;max-width:560px;background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:14px 14px 0 0;
+  padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 30px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:12px}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.sheet-head h2{margin:0;font-family:var(--font-display);font-size:1.7rem;font-weight:700;letter-spacing:.03em}
+.pill{display:inline-block;border-radius:999px;padding:1px 10px;font-size:.8rem;font-weight:500;margin-left:8px;vertical-align:middle;font-family:var(--font-body);letter-spacing:0}
+.pill.free{background:var(--free-bg);color:var(--free)} .pill.taken{background:var(--taken-bg);color:var(--taken)} .pill.mine{background:var(--mine-bg);color:var(--mine)}
+.photo{width:100%;max-height:34vh;object-fit:cover;border-radius:8px;background:var(--asphalt)}
+.meta{color:var(--muted);margin:0}
+.meta b{color:var(--ink);font-weight:600}
+.note{margin:0;border-radius:8px;padding:8px 12px;font-weight:500}
+.note.bad{background:var(--taken-bg);color:var(--taken)}
+.note.ok{background:var(--free-bg);color:var(--free)}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+button.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;min-height:44px}
+button.btn.primary{background:var(--mine);border-color:var(--mine);color:#fff}
+button.btn.danger{background:var(--taken);border-color:var(--taken);color:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.btn.primary,:root:not([data-theme="light"]) button.btn.danger{color:#10161A}}
+:root[data-theme="dark"] button.btn.primary,:root[data-theme="dark"] button.btn.danger{color:#10161A}
+button.btn:disabled{opacity:.5;cursor:default}
+.x{background:none;border:0;color:var(--muted);font-size:1.5rem;line-height:1;cursor:pointer;min-width:44px;min-height:44px}
+input.plate{font:inherit;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);min-height:44px}
+label.lbl{font-size:.85rem;color:var(--muted);display:block;margin-bottom:4px}
+.toasts{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
+.toast{pointer-events:auto;max-width:420px;width:100%;background:var(--ink);color:var(--bg);border-radius:10px;padding:12px 16px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.25);animation:in .25s ease-out}
+.toast.warn{background:var(--taken);color:#fff}
+.toast.ok{background:var(--free);color:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .toast.ok,:root:not([data-theme="light"]) .toast.warn{color:#10161A}}
+:root[data-theme="dark"] .toast.ok,:root[data-theme="dark"] .toast.warn{color:#10161A}
+@keyframes in{from{transform:translateY(-12px);opacity:0}to{transform:none;opacity:1}}
+@media (max-width:560px){
+  .row{grid-template-columns:repeat(4,minmax(0,1fr))}
+  h1{font-size:1.9rem}
+}
+@media (prefers-reduced-motion: reduce){.toast,.bay.flash,.status.live .dot{animation:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>ParkSnap</h1>
+      <p class="sub">ถ่ายรูปรถหลังจอด ช่องนั้นจะขึ้นว่าถูกจองบนทุกเครื่องทันที</p>
+    </div>
+    <div class="counts" aria-live="polite">
+      <div class="count free"><b id="nFree">16</b><span>ช่องว่าง</span></div>
+      <div class="count taken"><b id="nTaken">0</b><span>จอดแล้ว</span></div>
+    </div>
+  </header>
+  <div class="status" id="status"><span class="dot"></span><span id="statusTxt">กำลังเชื่อมต่อ…</span></div>
+  <div class="banner" id="banner" hidden></div>
+  <main class="lot" id="lot" aria-busy="true"></main>
+  <div class="legend">
+    <span><i style="background:var(--free-bg);border:1px solid var(--free)"></i>ว่าง</span>
+    <span><i style="background:var(--taken-bg);border:1px solid var(--taken)"></i>มีคนจอดแล้ว</span>
+    <span><i style="background:var(--mine-bg);border:1px solid var(--mine)"></i>รถของคุณ</span>
+  </div>
+</div>
+<div class="sheet" id="sheet" hidden><div class="sheet-in" id="sheetIn"></div></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<input id="cam" type="file" accept="image/*" capture="environment" hidden>
+
+<script>
+(function(){
+  var ZONES=[{id:'A',n:8},{id:'B',n:8}];
+  var IDS=[]; ZONES.forEach(function(z){for(var i=1;i<=z.n;i++)IDS.push(z.id+i);});
+  var $=function(id){return document.getElementById(id)};
+  var db=null, uid=null, canWrite=null, loaded=false, unsub=null;
+  var tabId='t'+Math.random().toString(36).slice(2,10);
+  var slots=new Map();            // slot id -> data, only for taken bays
+  var selected=null, draft=null, plate='', busy=false, confirmRelease=false;
+  var sheetKey='';
+
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function fmtTime(ms){try{return new Date(ms).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}catch(e){return ''}}
+  function fmtDur(ms){var m=Math.max(0,Math.floor((Date.now()-ms)/60000));if(m<1)return 'เมื่อสักครู่';if(m<60)return m+' นาที';var h=Math.floor(m/60);return h+' ชม. '+(m%60)+' นาที'}
+  function isMine(d){return !!(uid&&d&&d.by===uid)}
+
+  function toast(msg,kind){
+    var t=document.createElement('div');t.className='toast '+(kind||'');t.textContent=msg;$('toasts').appendChild(t);
+    setTimeout(function(){t.remove()},5200);
+  }
+
+  /* ---------- map ---------- */
+  function bayHtml(id){
+    var d=slots.get(id), sel=selected===id?' sel':'';
+    if(d){
+      var cls=isMine(d)?'taken mine':'taken';
+      return '<button class="bay '+cls+sel+'" data-id="'+id+'" aria-label="ช่อง '+id+' มีคนจอดแล้ว">'
+        +(d.photo?'<img alt="" src="'+esc(d.photo)+'">':'')
+        +'<span class="tag"><span class="no">'+id+'</span><span class="st">'+(isMine(d)?'รถของคุณ':'จองแล้ว')+'</span></span></button>';
+    }
+    return '<button class="bay'+sel+'" data-id="'+id+'" aria-label="ช่อง '+id+' ว่าง"><span class="no">'+id+'</span><span class="st">ว่าง</span></button>';
+  }
+  function renderMap(){
+    var h='';
+    ZONES.forEach(function(z,zi){
+      var bays='';for(var i=1;i<=z.n;i++)bays+=bayHtml(z.id+i);
+      h+='<div class="zone-label">โซน '+z.id+'</div><div class="row">'+bays+'</div>';
+      if(zi===0)h+='<div class="lane"><span>ทางรถเข้า-ออก</span></div>';
+    });
+    $('lot').innerHTML=h;
+    $('lot').setAttribute('aria-busy',loaded?'false':'true');
+    $('nTaken').textContent=slots.size;
+    $('nFree').textContent=IDS.length-slots.size;
+  }
+  function flash(id){
+    var b=document.querySelector('.bay[data-id="'+id+'"]');
+    if(b){b.classList.add('flash');setTimeout(function(){b.classList.remove('flash')},1500)}
+  }
+
+  /* ---------- bottom sheet ---------- */
+  function sheetSig(){
+    var d=selected&&slots.get(selected);
+    return JSON.stringify([selected,d?d.at:0,d?d.by:0,draft?draft.check:null,busy,confirmRelease,canWrite,!!db]);
+  }
+  function renderSheet(force){
+    var sig=sheetSig(); if(!force&&sig===sheetKey)return; sheetKey=sig;
+    var sh=$('sheet'), el=$('sheetIn');
+    if(!selected){sh.hidden=true;el.innerHTML='';return}
+    sh.hidden=false;
+    var d=slots.get(selected), h='';
+    var writable=!!db&&canWrite!==false&&!!uid;
+    if(d){
+      var mine=isMine(d);
+      h+='<div class="sheet-head"><h2>ช่อง '+selected+'<span class="pill '+(mine?'mine':'taken')+'">'+(mine?'รถของคุณ':'มีคนจองแล้ว')+'</span></h2><button class="x" data-act="close" aria-label="ปิด">×</button></div>';
+      if(d.photo)h+='<img class="photo" alt="รูปรถที่จอดในช่อง '+selected+'" src="'+esc(d.photo)+'">';
+      h+='<p class="meta">'+(d.plate?'ทะเบียน <b>'+esc(d.plate)+'</b> · ':'')+'จอดเมื่อ <b>'+fmtTime(d.at)+'</b> (<span id="dur">'+fmtDur(d.at)+'</span>)</p>';
+      if(writable){
+        h+='<div class="actions">';
+        if(!confirmRelease)h+='<button class="btn" data-act="askRelease"'+(busy?' disabled':'')+'>'+(mine?'ขับออกแล้ว ปล่อยช่อง':'รถออกไปแล้ว ปล่อยช่อง')+'</button>';
+        else h+='<button class="btn danger" data-act="release"'+(busy?' disabled':'')+'>ยืนยันปล่อยช่อง '+selected+'</button><button class="btn" data-act="cancelRelease">ยกเลิก</button>';
+        h+='</div>';
+      }
+    }else{
+      h+='<div class="sheet-head"><h2>ช่อง '+selected+'<span class="pill free">ว่าง</span></h2><button class="x" data-act="close" aria-label="ปิด">×</button></div>';
+      if(!db)h+='<p class="meta">ยังเชื่อมต่อระบบไม่ได้ จึงดูสถานะอย่างเดียว</p>';
+      else if(canWrite===false)h+='<p class="meta">บัญชีนี้ดูได้อย่างเดียว ต้องได้รับสิทธิ์ผู้ร่วมใช้งาน (Contributor) จึงจะจองช่องได้</p>';
+      else if(!uid)h+='<p class="meta">ต้องลงชื่อเข้าใช้ก่อนจึงจะจองช่องได้</p>';
+      else{
+        if(draft){
+          h+='<img class="photo" alt="รูปรถที่ถ่ายไว้" src="'+draft.dataUrl+'">';
+          if(draft.check==='pending')h+='<p class="meta">กำลังตรวจว่าเป็นรูปรถ…</p>';
+          else if(draft.check==='bad')h+='<p class="note bad">รูปนี้ดูไม่เหมือนรถ'+(draft.reason?' ('+esc(draft.reason)+')':'')+' ถ่ายใหม่ให้เห็นรถที่จอดชัดเจน</p>';
+          else if(draft.check==='ok')h+='<p class="note ok">ตรวจแล้ว เป็นรูปรถ</p>';
+          else h+='<p class="meta">ตรวจรูปอัตโนมัติไม่ได้ จึงข้ามขั้นตอนนี้</p>';
+        }
+        h+='<div><label class="lbl" for="plate">ทะเบียนรถ (ไม่บังคับ)</label><input class="plate" id="plate" maxlength="16" autocomplete="off" placeholder="เช่น 1กก 1234" value="'+esc(plate)+'"></div>';
+        h+='<div class="actions"><button class="btn'+(draft?'':' primary')+'" data-act="shoot"'+(busy?' disabled':'')+'>'+(draft?'ถ่ายใหม่':'ถ่ายรูปรถ')+'</button>';
+        if(draft&&draft.check!=='bad')h+='<button class="btn primary" data-act="claim"'+(busy||draft.check==='pending'?' disabled':'')+'>'+(busy?'กำลังบันทึก…':'ยืนยันจอดช่อง '+selected)+'</button>';
+        h+='</div>';
+      }
+    }
+    el.innerHTML=h;
+    var pi=$('plate'); if(pi)pi.addEventListener('input',function(){plate=pi.value});
+  }
+  function select(id){
+    if(selected===id){selected=null}else{selected=id}
+    draft=null;plate='';confirmRelease=false;
+    renderMap();renderSheet(true);
+  }
+
+  /* ---------- actions ---------- */
+  function shrink(file){
+    return new Promise(function(res,rej){
+      var url=URL.createObjectURL(file), img=new Image();
+      img.onload=function(){
+        var m=640,s=Math.min(1,m/Math.max(img.width,img.height)),c=document.createElement('canvas');
+        c.width=Math.max(1,Math.round(img.width*s));c.height=Math.max(1,Math.round(img.height*s));
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);
+        var q=0.6,out=c.toDataURL('image/jpeg',q);
+        while(out.length>180000&&q>0.3){q-=0.1;out=c.toDataURL('image/jpeg',q)}
+        res(out);
+      };
+      img.onerror=function(){URL.revokeObjectURL(url);rej(new Error('image'))};
+      img.src=url;
+    });
+  }
+  function dataUrlToBlob(u){
+    var p=u.split(','),bin=atob(p[1]),a=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);
+    return new Blob([a],{type:'image/jpeg'});
+  }
+  /* Asks Claude whether the photo shows a vehicle. If the check cannot run, the photo is allowed. */
+  async function verify(dr){
+    try{
+      var sample=window.claude&&window.claude.use?await window.claude.use('sample'):null;
+      if(!sample)throw new Error('none');
+      var lim=await sample.limits();
+      if(!lim||!lim.images)throw new Error('none');
+      var r=await sample.json('ดูรูปนี้แล้วตอบว่ามียานพาหนะ (รถยนต์ รถกระบะ รถตู้ หรือมอเตอร์ไซค์) จอดอยู่ในภาพชัดเจนหรือไม่ '
+        +'ตอบเป็น JSON อย่างเดียว เช่น {"vehicle": true, "reason": "เห็นรถเก๋งสีขาว"} '
+        +'ถ้าไม่ใช่รูปรถ ให้ vehicle เป็น false และ reason เป็นประโยคสั้นๆ ภาษาไทยว่าในรูปเป็นอะไร',{images:dataUrlToBlob(dr.dataUrl),modelTier:'quick'});
+      if(draft!==dr)return;
+      if(r&&r.vehicle===false){dr.check='bad';dr.reason=String(r.reason||'').slice(0,80)}else dr.check='ok';
+    }catch(e){
+      if(draft!==dr)return;
+      dr.check='skipped';
+    }
+    renderSheet(true);
+  }
+  async function claim(){
+    if(busy||!draft||draft.check==='bad'||draft.check==='pending'||!selected||!db)return;
+    var id=selected;busy=true;renderSheet();
+    try{
+      var ref=db.doc('slots/'+id);
+      var lease=await ref.acquire({holder:uid||tabId,ttlMs:8000});
+      if(!lease.acquired){toast('มีคนกำลังจองช่อง '+id+' อยู่ ลองใหม่อีกครั้ง','warn');return}
+      var cur=await ref.get();
+      if(cur.exists&&cur.data()&&cur.data().status==='taken'){
+        toast('ช่อง '+id+' มีคนจองไปก่อนแล้ว','warn');draft=null;return;
+      }
+      await ref.set({status:'taken',photo:draft.dataUrl,plate:plate.trim(),by:uid,at:Date.now()});
+      toast('จองช่อง '+id+' แล้ว','ok');
+      selected=null;draft=null;plate='';
+    }catch(e){
+      toast('บันทึกไม่สำเร็จ ลองอีกครั้ง','warn');
+    }finally{busy=false;renderMap();renderSheet(true)}
+  }
+  async function release(){
+    if(busy||!selected||!db)return;
+    var id=selected;busy=true;renderSheet();
+    try{
+      await db.doc('slots/'+id).delete();
+      toast('ปล่อยช่อง '+id+' แล้ว','ok');selected=null;
+    }catch(e){toast('ปล่อยช่องไม่สำเร็จ ลองอีกครั้ง','warn')}
+    finally{busy=false;confirmRelease=false;renderMap();renderSheet(true)}
+  }
+
+  document.addEventListener('click',function(e){
+    var bay=e.target.closest&&e.target.closest('.bay');
+    if(bay){select(bay.getAttribute('data-id'));return}
+    var b=e.target.closest&&e.target.closest('[data-act]');
+    if(!b)return;
+    var a=b.getAttribute('data-act');
+    if(a==='close')select(selected);
+    else if(a==='shoot')$('cam').click();
+    else if(a==='claim')claim();
+    else if(a==='askRelease'){confirmRelease=true;renderSheet()}
+    else if(a==='cancelRelease'){confirmRelease=false;renderSheet()}
+    else if(a==='release')release();
+  });
+  $('cam').addEventListener('change',function(){
+    var f=this.files&&this.files[0];this.value='';
+    if(!f)return;
+    shrink(f).then(function(url){var dr={dataUrl:url,check:'pending',reason:''};draft=dr;renderSheet(true);verify(dr)}).catch(function(){toast('เปิดรูปนี้ไม่ได้ ลองถ่ายใหม่','warn')});
+  });
+
+  /* ---------- realtime ---------- */
+  function onSnap(snap){
+    var next=new Map();
+    snap.docs.forEach(function(doc){var d=doc.data();if(d&&d.status==='taken')next.set(doc.id,d)});
+    if(loaded){
+      next.forEach(function(d,id){
+        if(!slots.has(id)&&!isMine(d)){toast('ช่อง '+id+' มีคนจองแล้ว','warn');flash(id);
+          if(selected===id&&draft){draft=null;toast('ช่อง '+id+' ถูกจองระหว่างที่คุณถ่ายรูป เลือกช่องอื่นได้เลย','warn')}}
+      });
+      slots.forEach(function(d,id){
+        if(!next.has(id)&&!(busy&&selected===id)){toast('ช่อง '+id+' ว่างแล้ว','ok')}
+      });
+    }
+    slots=next;
+    if(selected&&!slots.has(selected))confirmRelease=false;
+    if(!loaded){loaded=true;clearTimeout(slowTimer)}
+    setStatus(true);
+    renderMap();renderSheet();
+  }
+  var slowTimer=null;
+  function setStatus(live){
+    var s=$('status');s.className='status'+(live?' live':'');
+    $('statusTxt').textContent=live?'เชื่อมต่อแล้ว อัปเดตเรียลไทม์':'กำลังเชื่อมต่อ…';
+  }
+  function banner(msg){var b=$('banner');if(msg){b.textContent=msg;b.hidden=false}else b.hidden=true}
+
+  setInterval(function(){
+    var d=selected&&slots.get(selected),el=$('dur');
+    if(d&&el)el.textContent=fmtDur(d.at);
+  },30000);
+
+  renderMap();
+
+  (async function init(){
+    try{
+      var c=window.claude;
+      if(!c||!c.use){setStatus(false);banner('เปิดหน้านี้ผ่าน claude.ai เพื่อใช้งานแบบเรียลไทม์ ตอนนี้ดูได้อย่างเดียว');return}
+      var res=await Promise.all([c.use('db'),c.use('user')]);
+      db=res[0];var user=res[1];
+      if(user){try{uid=await user.id()}catch(e){uid=null}try{canWrite=await user.can('data.write')}catch(e){canWrite=null}}
+      if(!db){banner('ยังเชื่อมต่อระบบไม่ได้ ต้องลงชื่อเข้าใช้และเปิดผ่าน claude.ai ตอนนี้ดูได้อย่างเดียว');return}
+      if(canWrite===false)banner('บัญชีนี้ดูสถานะได้อย่างเดียว ต้องได้รับสิทธิ์ผู้ร่วมใช้งาน (Contributor) จึงจะจองช่องได้');
+      slowTimer=setTimeout(function(){if(!loaded)banner('ยังติดต่อฐานข้อมูลไม่ได้ ข้อมูลที่เห็นอาจไม่ล่าสุด')},10000);
+      unsub=db.collection('slots').onSnapshot(onSnap,function(){setStatus(false);banner('การเชื่อมต่อขาดหาย โหลดหน้าใหม่อีกครั้ง')});
+      renderSheet(true);
+    }catch(e){banner('เริ่มระบบไม่สำเร็จ โหลดหน้าใหม่อีกครั้ง')}
+  })();
+})();
+</script>
+
+</body></html>
